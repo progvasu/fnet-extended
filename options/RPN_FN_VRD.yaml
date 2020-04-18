@@ -1,6 +1,6 @@
 # training settings for RPN
 kmeans_anchors: True
-anchor_dir: /home/vasu/Desktop/Thesis/FactorizableNet/data/annotations/vrd
+anchor_dir: /content/vrd
 
 object:
       train:
