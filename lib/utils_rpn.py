@@ -1,3 +1,4 @@
+import pdb
 import json
 import os.path as osp
 
@@ -7,12 +8,37 @@ import numpy.random as npr
 import torch
 import torch.nn.functional as F
 
-from lib.utils import bbox_transform
+from lib.bbox_transform import bbox_transform, bbox_transform_inv, clip_boxes
 from lib.cuda.nms_wrapper import nms
 
-####
+from lib.cuda.cython_bbox import bbox_overlaps
 
-# from ..utils.cython_bbox import bbox_overlaps, bbox_intersections # later
+def load_checkpoint(filename, model):
+    model_name = '{}.h5'.format(filename)
+    load_net_from_fnet(model_name, model)
+
+def load_net_from_fnet(fname, net):
+    import h5py
+    h5f = h5py.File(fname, mode='r')
+    for k, v in net.state_dict().items():
+        try:
+            if ('rpn.'+k) in h5f:
+                param = torch.from_numpy(np.asarray(h5f['rpn.'+k]))
+                v.copy_(param)
+                print ('[Copied]: {}').format(k)
+            else:
+                print ('[Missed]: {}').format(k)
+                # print ('[Manually copy instructions]: \n'
+                #          'check the existence of new name:\n'
+                #          '\t \'{}\' in h5f\n'
+                #          'if True, then copy\n'
+                #          '\t param = torch.from_numpy(np.asarray(h5f[\'{}\']))\n'
+                #          '\t v.copy_(param)\n'.format(k, k))
+                # pdb.set_trace()
+        except Exception as e:
+            print (e)
+            print ('[Loaded net not complete] Parameter[{}] Size Mismatch...').format(k)
+            pdb.set_trace()
 
 
 def reshape_layer(x, d):
@@ -126,19 +152,100 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_infos, _feat_stride, 
         scores = scores[keep]
 
         order = scores.ravel().argsort()[::-1]
-        if pre_nms_topN > 0:
-            order = order[:pre_nms_topN]
+        # if pre_nms_topN > 0:
+        #     order = order[:pre_nms_topN]
         proposals = proposals[order, :]
         scores = scores[order]
 
+        nms_thres = 0.6
         keep = nms(np.hstack((proposals, scores)).astype(np.float32), nms_thres)
-        
-        if post_nms_topN > 0:
-            keep = keep[:post_nms_topN]
+        # if post_nms_topN > 0:
+        #     keep = keep[:post_nms_topN]
+            # keep = keep[:10] # trying to reduce memory requirement
+
         proposals = proposals[keep, :]
         scores = scores[keep]
 
+        # USING NO12000 RPN-INDI_TRAINED SCORES
+        # jsonC = json.load(open("/home/vasu/Desktop/Thesis/gossipnet-pytorch/data/vrd/test-no12000-nms-0.7/" + image_name + ".json"))
+        # proposals = np.array(jsonC['detections'][:100])
+        # scores = np.array(jsonC['scores'])
+        # proposals = proposals[:100]
+        # scores = scores[:100]
+
+        # sorted_indexs = np.argsort(-scores)
+        # proposals = proposals[sorted_indexs[:20]]
+        # scores = scores[sorted_indexs[:20]].reshape(20, 1)
+
+        # storing the correct post-nms boxes
+        # saving post-nms and thresholding
+        if image_name:
+            pre_nms_store = {}
+            pre_nms_store['gt_boxes'] = gt_objects[0].tolist()
+            pre_nms_store['detections'] = proposals.tolist()
+            pre_nms_store['scores'] = scores.tolist()
+            pre_nms_store['scale'] = im_info[2]
+            print ("no detections: {}, saving...".format(len(proposals.tolist())))
+            with open("/home/vasu/Desktop/Thesis/gossipnet-pytorch/data/vrd/test-fnet-no12000-nms0.6/" + image_name.split('.')[0] + ".json", 'w') as f:
+                json.dump(pre_nms_store, f)  
+
+        # jsonC = json.load(open("/home/vasu/Desktop/Thesis/gossipnet-pytorch/output-fnet-0.6-no-350-0.3-4-full/test_vrd/" + image_name + ".json"))
+        # proposals = np.array(jsonC['detections'][:350])
+        # scores = np.array(jsonC['predictions'])
+        # sorted_indexs = np.argsort(-scores)
+        # proposals = proposals[sorted_indexs[:10]]
+        # scores = scores[sorted_indexs[:10]].reshape(10, 1)
+
+        # mini = scores.min()
+        # maxi = scores.max()
+        # scores = (scores - mini) / (maxi - mini)
+        # scores = np.ones([100, 1])
+
+        # the entire code will go away and based on file_name we need to feed in detections
+
+        # config 0. - top 350
+        # jsonC = json.load(open("/home/vasu/Desktop/Thesis/gossipnet-pytorch/output-0.7-0.5-350-0.3-4-full/test_vrd/" + image_name + ".json"))
+        # proposals = np.array(jsonC['detections'][:350])
+        # scores = np.array(jsonC['predictions'])
+        # sorted_indexs = np.argsort(-scores)
+        # proposals = proposals[sorted_indexs[:10]]
+        # scores = scores[sorted_indexs[:10]].reshape(10, 1)
+        # mini = scores.min()
+        # maxi = scores.max()
+        # scores = (scores - mini) / (maxi - mini)
+        # scores = np.ones([100, 1])
+
+
+        # config 1. - top 2000 
+        # jsonC = json.load(open("/home/vasu/Desktop/Thesis/gossipnet-pytorch/output-0.8-2000(50)-0.3-4-full/test_vrd/" + image_name + ".json"))
+        # proposals = np.array(jsonC['detections'][:2000])
+        # scores = np.array(jsonC['predictions'])
+        # sorted_indexs = np.argsort(-scores)
+        # proposals = proposals[sorted_indexs[:20]]
+        # scores = scores[sorted_indexs[:20]].reshape(20, 1)
+
+
+        # config 2. - cc 
+        # jsonC = json.load(open("/home/vasu/Desktop/Thesis/gossipnet-pytorch/output-0.8-2000(cc)-0.2-4-full/test_vrd/" + image_name + ".json"))
+        # proposals = np.array(jsonC['detections'][:400])
+        # scores = np.array(jsonC['predictions'])
+        # # print (np.array(jsonC['detections']).shape)
+        # # print (scores.shape)
+        # sorted_indexs = np.argsort(-scores)
+        # proposals = proposals[sorted_indexs[:20]]
+        # scores = scores[sorted_indexs[:20]].reshape(20, 1)
+
+        # config 3. - cn 
+        # jsonC = json.load(open("/home/vasu/Desktop/Thesis/gossipnet-pytorch/output-0.8-2000(cn)-0.3-4-full/test_vrd/" + image_name + ".json"))
+        # proposals = np.array(jsonC['detections'][:2000])
+        # scores = np.array(jsonC['predictions'])
+        # sorted_indexs = np.argsort(-scores)
+        # proposals = proposals[sorted_indexs[:20]]
+        # scores = scores[sorted_indexs[:20]].reshape(20, 1)
+
+
         batch_inds = np.ones((proposals.shape[0], 1), dtype=np.float32) * i
+
         blob.append(np.hstack((batch_inds, proposals.astype(np.float32, copy=False), scores.astype(np.float32, copy=False))))
 
     return np.concatenate(blob, axis=0)
@@ -178,45 +285,8 @@ def _mkanchors(ws, hs, x_ctr, y_ctr):
     anchors = np.hstack((x_ctr - 0.5 * (ws - 1), y_ctr - 0.5 * (hs - 1), x_ctr + 0.5 * (ws - 1), y_ctr + 0.5 * (hs - 1)))
     return anchors
 
-def bbox_transform_inv(boxes, deltas):
-    if boxes.shape[0] == 0:
-        return np.zeros((0,), dtype=deltas.dtype)
-
-    boxes = boxes.astype(deltas.dtype, copy=False)
-    widths = boxes[:, 2] - boxes[:, 0] + 1.0
-    heights = boxes[:, 3] - boxes[:, 1] + 1.0
-    ctr_x = boxes[:, 0] + 0.5 * widths
-    ctr_y = boxes[:, 1] + 0.5 * heights
-
-    deltas = deltas * np.array((0.1, 0.1, 0.2, 0.2)) + np.array((0.0, 0.0, 0.0, 0.0))
-
-    dx = deltas[:, 0::4]
-    dy = deltas[:, 1::4]
-    dw = deltas[:, 2::4]
-    dh = deltas[:, 3::4]
-
-    pred_ctr_x = dx * widths[:, np.newaxis] + ctr_x[:, np.newaxis]
-    pred_ctr_y = dy * heights[:, np.newaxis] + ctr_y[:, np.newaxis]
-    pred_w = np.exp(dw) * widths[:, np.newaxis]
-    pred_h = np.exp(dh) * heights[:, np.newaxis]
-
-    pred_boxes = np.zeros(deltas.shape, dtype=deltas.dtype)
-    pred_boxes[:, 0::4] = pred_ctr_x - 0.5 * pred_w
-    pred_boxes[:, 1::4] = pred_ctr_y - 0.5 * pred_h
-    pred_boxes[:, 2::4] = pred_ctr_x + 0.5 * pred_w - 1.0 
-    pred_boxes[:, 3::4] = pred_ctr_y + 0.5 * pred_h - 1.0 
-    return pred_boxes
 
 
-def clip_boxes(boxes, im_shape):
-    if boxes.shape[0] == 0:
-        return boxes
-
-    boxes[:, 0::4] = np.maximum(np.minimum(boxes[:, 0::4], im_shape[1] - 1), 0)
-    boxes[:, 1::4] = np.maximum(np.minimum(boxes[:, 1::4], im_shape[0] - 1), 0)
-    boxes[:, 2::4] = np.maximum(np.minimum(boxes[:, 2::4], im_shape[1] - 1), 0)
-    boxes[:, 3::4] = np.maximum(np.minimum(boxes[:, 3::4], im_shape[0] - 1), 0)
-    return boxes
 
 
 #### anchor target layer

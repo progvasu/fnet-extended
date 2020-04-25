@@ -25,7 +25,7 @@ class VRD(data.Dataset):
         self._image_set = image_set
         self._data_path = osp.join(self.opts['dir'], 'sg_{}_images'.format(image_set)) # opts['dir'] points to -> "data/images/vrd"
         
-        annotation_dir = "/content/vrd"
+        annotation_dir = "/home/vasu/Desktop/Thesis/FactorizableNet/data/annotations/vrd"
         
         # load class inverse weights
         inverse_weight = json.load(open(osp.join(annotation_dir, 'inverse_weight.json')))

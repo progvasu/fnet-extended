@@ -10,7 +10,7 @@ import torch
 
 import datasets
 import model as models
-from lib.utils import get_model_name, group_features, get_optimizer
+from lib.utils import get_model_name, group_features, get_optimizer, save_results
 import lib.network as network
 import lib.utils as utils
 from model.fnet import FactorizableNetwork
@@ -208,14 +208,18 @@ def main():
         print('Model has {} parameters'.format(exp_logger.info['model_params']))
 
     # recall 50 and recall 100
-    top_Ns = [50, 100]
+    top_Ns = [10, 20, 50, 100]
 
     if args.evaluate:
         model.eval()
-
-        recall, result = model.engines.test(test_loader, model, top_Ns, nms=args.nms, triplet_nms=args.triplet_nms, use_gt_boxes=args.use_gt_boxes)
+        recall, result = model.engines.test(test_loader, 
+                                                model, 
+                                                top_Ns, 
+                                                nms=args.nms, 
+                                                triplet_nms=args.triplet_nms,
+                                                use_gt_boxes=args.use_gt_boxes)
         
-        print ('======= Testing Result =======')
+        print ('======= Testing Result =======, config-0, top-10, nms-rpn')
         for idx, top_N in enumerate(top_Ns):
             print ('Top-%d Recall \t[Pred]: %2.3f%% \t[Phr]: %2.3f%% \t[Rel]: %2.3f%%' % (
                         top_N, 
@@ -224,7 +228,7 @@ def main():
                         float(recall[0][idx]) * 100))
         print ('============ Done ============')
         
-        save_results(result, None, options['logs']['dir_logs'], is_testing=True)
+        # save_results(result, None, options['logs']['dir_logs'], is_testing=True)
         return
 
     print ('\n========== [Starting Training] ==========\n')

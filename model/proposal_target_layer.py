@@ -3,7 +3,7 @@ import numpy as np
 import numpy.random as npr
 from easydict import EasyDict as edict
 
-from lib.utils import bbox_transform
+from lib.bbox_transform import bbox_transform
 from lib.cuda.nms_wrapper import nms
 
 # configurations

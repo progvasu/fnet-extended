@@ -118,9 +118,12 @@ def test(loader, model, top_Ns, nms=-1., triplet_nms=-1., use_gt_boxes=False):
     model.eval()
 
     rel_cnt = 0.
-    rel_cnt_correct = np.zeros(2)
-    phrase_cnt_correct = np.zeros(2)
-    pred_cnt_correct = np.zeros(2)
+    # rel_cnt_correct = np.zeros(2)
+    # phrase_cnt_correct = np.zeros(2)
+    # pred_cnt_correct = np.zeros(2)
+    rel_cnt_correct = np.zeros(len(top_Ns))
+    phrase_cnt_correct = np.zeros(len(top_Ns))
+    pred_cnt_correct = np.zeros(len(top_Ns))
     total_region_rois_num = 0
     max_region_rois_num = 0
     result = []
@@ -135,11 +138,17 @@ def test(loader, model, top_Ns, nms=-1., triplet_nms=-1., use_gt_boxes=False):
             gt_objects = sample['objects']
             gt_relationships = sample['relations']
             image_info = sample['image_info']
+            
             # forward pass
-            total_cnt_t, cnt_correct_t, eval_result_t = model.evaluate(
-                input_visual, image_info, gt_objects, gt_relationships,
-                top_Ns = top_Ns, nms=nms, triplet_nms=triplet_nms,
-                use_gt_boxes=use_gt_boxes)
+            total_cnt_t, cnt_correct_t, eval_result_t = model.evaluate(input_visual, 
+                                                                        image_info, 
+                                                                        gt_objects, 
+                                                                        gt_relationships,
+                                                                        top_Ns=top_Ns, 
+                                                                        nms=nms, 
+                                                                        triplet_nms=triplet_nms,
+                                                                        use_gt_boxes=use_gt_boxes,
+                                                                        image_name=sample['path'][0].split(".")[0])
             eval_result_t['path'] = sample['path'][0] # for visualization
             rel_cnt += total_cnt_t
             result.append(eval_result_t)
@@ -150,7 +159,7 @@ def test(loader, model, top_Ns, nms=-1., triplet_nms=-1., use_gt_boxes=False):
             max_region_rois_num = cnt_correct_t[3] if cnt_correct_t[3] > max_region_rois_num else max_region_rois_num
             batch_time.update(time.time() - end)
             end = time.time()
-            if (i + 1) % 500 == 0 and i > 0:
+            if (i + 1) % 10 == 0 and i > 0:
                 print ('[Evaluation][%d/%d][%.2fs/img][avg: %d subgraphs, max: %d subgraphs]' %(i+1, len(loader), batch_time.avg, total_region_rois_num / float(i+1), max_region_rois_num))
                 for idx, top_N in enumerate(top_Ns):
                     print ('\tTop-%d Recall:\t[Pred] %2.3f%%\t[Phr] %2.3f%%\t[Rel] %2.3f%%' % (

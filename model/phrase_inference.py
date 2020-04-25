@@ -82,6 +82,7 @@ class PI_v5(Basic_Phrase_Inference_Structure):
 		batch_size = transformed_feat_sub.size(0)
 		transformed_feat_sub = transformed_feat_sub.view(batch_size, -1, 1, 1)
 		transformed_feat_obj = transformed_feat_obj.view(batch_size, -1, 1, 1)
+		
 		op = self.opts.get('op', 'Sum')
 		if op == 'Sum':
 			output_feature = transformed_feat_region + transformed_feat_sub + transformed_feat_obj
@@ -89,6 +90,8 @@ class PI_v5(Basic_Phrase_Inference_Structure):
 			output_feature = transformed_feat_region * transformed_feat_sub * transformed_feat_obj
 		elif op == 'Sum_Prod':
 			output_feature = transformed_feat_region * (transformed_feat_sub + transformed_feat_obj)
+
 		output_feature = self.predicate_feat_pre(output_feature).view(batch_size, -1)
 		output_feature = self.predicate_feat_fc(output_feature)
+
 		return output_feature

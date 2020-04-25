@@ -13,10 +13,11 @@ from model.proposal_target_layer import proposal_target_layer as proposal_target
 from model.proposal_target_layer import graph_construction as graph_construction_py
 from model.factor_updating_structure import factor_updating_structure
 
-from lib.utils import build_loss_bbox, build_loss_cls
+from lib.utils import build_loss_bbox, build_loss_cls, interpret_relationships
 import lib.network as network
 from lib.network import GroupDropout
 import model.engines as engines
+from lib.metrics import check_relationship_recall, check_phrase_recall
 
 from lib.cuda.roi_align import ROIAlign
 
@@ -190,9 +191,9 @@ class FactorizableNetwork(nn.Module):
 
         return losses
 
-    def forward_eval(self, im_data, im_info, gt_objects=None):
+    def forward_eval(self, im_data, im_info, gt_objects=None, image_name=None):
         # currently, RPN support batch but not for MSDN
-        features, object_rois, _ = self.rpn(im_data, im_info)
+        features, object_rois, _ = self.rpn(im_data, im_info, image_name=image_name)
         if gt_objects is not None:
             gt_rois = np.concatenate([np.zeros((gt_objects.shape[0], 1)),
                                       gt_objects[:, :4],
@@ -229,14 +230,14 @@ class FactorizableNetwork(nn.Module):
         return (cls_prob_object, bbox_object, object_rois, reranked_score), (cls_prob_predicate, mat_phrase, region_rois.size(0)),
     
 
-    def evaluate(self, im_data, im_info, gt_objects, gt_relationships, thr=0.5, nms=-1., triplet_nms=-1., top_Ns = [100], use_gt_boxes=False):
+    def evaluate(self, im_data, im_info, gt_objects, gt_relationships, thr=0.5, nms=-1., triplet_nms=-1., top_Ns = [100], use_gt_boxes=False, image_name=None):
         gt_objects = gt_objects[0]
         gt_relationships = gt_relationships[0]
+
         if use_gt_boxes:
-            object_result, predicate_result = self.forward_eval(im_data, im_info,
-                            gt_objects=gt_objects)
+            object_result, predicate_result = self.forward_eval(im_data, im_info, gt_objects=gt_objects, image_name=image_name)
         else:
-            object_result, predicate_result = self.forward_eval(im_data, im_info,)
+            object_result, predicate_result = self.forward_eval(im_data, im_info, image_name=image_name)
 
         cls_prob_object, bbox_object, object_rois, reranked_score = object_result[:4]
         cls_prob_predicate, mat_phrase = predicate_result[:2]
